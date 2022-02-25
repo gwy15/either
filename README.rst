@@ -31,6 +31,10 @@ How to use with cargo::
 Recent Changes
 --------------
 
+- 1.6.2
+
+  - Implement std::io::Seek
+
 - 1.6.1
 
   - Add new methods ``.expect_left()``, ``.unwrap_left()``,

@@ -36,7 +36,7 @@ use std::ops::DerefMut;
 #[cfg(any(test, feature = "use_std"))]
 use std::error::Error;
 #[cfg(any(test, feature = "use_std"))]
-use std::io::{self, BufRead, Read, Write};
+use std::io::{self, BufRead, Read, Seek, Write};
 
 pub use Either::{Left, Right};
 
@@ -855,6 +855,20 @@ where
 }
 
 #[cfg(any(test, feature = "use_std"))]
+/// `Either<L, R>` implements `Seek` if both `L` and `R` do.
+///
+/// Requires crate feature `"use_std"`
+impl<L, R> Seek for Either<L, R>
+where
+    L: Seek,
+    R: Seek,
+{
+    fn seek(&mut self, pos: std::io::SeekFrom) -> io::Result<u64> {
+        either!(*self, ref mut inner => inner.seek(pos))
+    }
+}
+
+#[cfg(any(test, feature = "use_std"))]
 /// Requires crate feature `"use_std"`
 impl<L, R> BufRead for Either<L, R>
 where
@@ -1090,6 +1104,36 @@ fn read_write() {
 
     let buf = [1u8; 16];
     assert_eq!(writer.write(&buf).unwrap(), buf.len());
+}
+
+#[test]
+fn seek() {
+    use std::io;
+
+    let use_empty = false;
+    let mut mockdata = [0x00; 256];
+    for i in 0..256 {
+        mockdata[i] = i as u8;
+    }
+
+    let mut reader = if use_empty {
+        Left(io::empty())
+    } else {
+        Right(io::Cursor::new(&mockdata[..]))
+    };
+
+    let mut buf = [0u8; 16];
+    assert_eq!(reader.read(&mut buf).unwrap(), buf.len());
+    assert_eq!(&buf, &mockdata[..buf.len()]);
+
+    // the first read should advance the cursor and return the next 16 bytes thus the `ne`
+    assert_eq!(reader.read(&mut buf).unwrap(), buf.len());
+    assert_ne!(&buf, &mockdata[..buf.len()]);
+
+    // if the seek operation fails it should read 16..31 instead of 0..15
+    reader.seek(io::SeekFrom::Start(0)).unwrap();
+    assert_eq!(reader.read(&mut buf).unwrap(), buf.len());
+    assert_eq!(&buf, &mockdata[..buf.len()]);
 }
 
 #[test]
